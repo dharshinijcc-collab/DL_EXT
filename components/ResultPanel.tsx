@@ -1,7 +1,14 @@
 "use client";
+import { useState } from "react";
 import type { ExtractResult } from "@/app/page";
 
-type Props = { result: ExtractResult | null; loading: boolean };
+type Props = { 
+  result: ExtractResult | null; 
+  loading: boolean;
+  onVerify?: (verifiedData: Record<string, string>) => void;
+  onSave?: () => void;
+  isVerified?: boolean;
+};
 
 const CONF_STYLE: Record<string, { bg: string; color: string }> = {
   High:   { bg: "var(--high)",  color: "var(--high-t)"  },
@@ -14,7 +21,9 @@ const DOC_GRAD: Record<string, { from: string; to: string; icon: string }> = {
   "Driving License": { from: "var(--dl-from)",   to: "var(--dl-to)",   icon: "🪪" },
 };
 
-export default function ResultPanel({ result, loading }: Props) {
+export default function ResultPanel({ result, loading, onVerify, onSave, isVerified }: Props) {
+  const [editingData, setEditingData] = useState<Record<string, string>>({});
+  const [isEditing, setIsEditing] = useState(false);
   if (loading) {
     return (
       <div style={{
@@ -68,6 +77,22 @@ export default function ResultPanel({ result, loading }: Props) {
   const { doc_type, confidence, strategy, ocr_text, extracted, preview, cropped } = result;
   const grad   = DOC_GRAD[doc_type] || { from: "#1a1a2e", to: "#0f0f1a", icon: "📄" };
   const conf   = CONF_STYLE[confidence] || CONF_STYLE["Low"];
+
+  // Initialize editing data when result changes
+  if (result && Object.keys(editingData).length === 0) {
+    setEditingData({ ...extracted });
+  }
+
+  const handleFieldChange = (key: string, value: string) => {
+    setEditingData(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleVerify = () => {
+    if (onVerify) {
+      onVerify(editingData);
+    }
+    setIsEditing(false);
+  };
 
   return (
     <div className="animate-fadeUp" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
@@ -139,11 +164,30 @@ export default function ResultPanel({ result, loading }: Props) {
           letterSpacing: "0.08em",
           color: "var(--muted)",
           marginBottom: "0.85rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
         }}>
-          Extracted Fields
+          <span>{isVerified ? "Verified Data" : "Extracted Fields"}</span>
+          {!isVerified && (
+            <button
+              onClick={() => setIsEditing(!isEditing)}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--accent)",
+                fontSize: "0.7rem",
+                padding: "4px 8px",
+                borderRadius: 6,
+                cursor: "pointer",
+              }}
+            >
+              {isEditing ? "Cancel" : "Edit"}
+            </button>
+          )}
         </div>
 
-        {Object.entries(extracted).map(([k, v], i, arr) => (
+        {Object.entries(isEditing ? editingData : extracted).map(([k, v], i, arr) => (
           <div key={k} style={{
             display: "flex",
             justifyContent: "space-between",
@@ -155,16 +199,56 @@ export default function ResultPanel({ result, loading }: Props) {
             <span style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
               {k.replace(/_/g, " ")}
             </span>
-            <span style={{
-              fontFamily: "'IBM Plex Mono', monospace",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              color: "var(--text)",
-            }}>
-              {String(v)}
-            </span>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editingData[k] || ""}
+                onChange={(e) => handleFieldChange(k, e.target.value)}
+                style={{
+                  fontFamily: "'IBM Plex Mono', monospace",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  color: "var(--text)",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 4,
+                  padding: "4px 8px",
+                  width: "60%",
+                }}
+              />
+            ) : (
+              <span style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                color: "var(--text)",
+              }}>
+                {String(v)}
+              </span>
+            )}
           </div>
         ))}
+
+        {isEditing && (
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+            <button
+              onClick={handleVerify}
+              style={{
+                flex: 1,
+                padding: "0.6rem",
+                background: "var(--accent)",
+                color: "white",
+                border: "none",
+                borderRadius: 8,
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              ✓ Verify
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Raw OCR */}
@@ -199,6 +283,44 @@ export default function ResultPanel({ result, loading }: Props) {
           {ocr_text}
         </pre>
       </details>
+
+      {/* Save button */}
+      {!isVerified && !isEditing && (
+        <button
+          onClick={onSave}
+          style={{
+            width: "100%",
+            padding: "0.85rem",
+            background: "var(--accent)",
+            color: "white",
+            border: "none",
+            borderRadius: 10,
+            fontSize: "0.9rem",
+            fontWeight: 700,
+            cursor: "pointer",
+            transition: "background 0.2s",
+          }}
+          onMouseOver={e => e.currentTarget.style.background = "var(--accent-hi)"}
+          onMouseOut={e => e.currentTarget.style.background = "var(--accent)"}
+        >
+          💾 Save to History
+        </button>
+      )}
+
+      {isVerified && (
+        <div style={{
+          background: "rgba(16, 185, 129, 0.1)",
+          border: "1px solid rgba(16, 185, 129, 0.3)",
+          borderRadius: 10,
+          padding: "0.75rem",
+          textAlign: "center",
+          color: "#10b981",
+          fontSize: "0.85rem",
+          fontWeight: 600,
+        }}>
+          ✓ Saved to History
+        </div>
+      )}
 
     </div>
   );

@@ -1,9 +1,10 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import UploadPanel from "@/components/UploadPanel";
 import ResultPanel from "@/components/ResultPanel";
 import StatusBar from "@/components/StatusBar";
 import QueuePanel from "@/components/QueuePanel";
+import HistoryPanel from "@/components/HistoryPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -25,6 +26,14 @@ export type QueueItem = {
   error?: string;
 };
 
+export type HistoryItem = {
+  id: string;
+  timestamp: number;
+  doc_type: string;
+  extracted: Record<string, string>;
+  preview: string;
+};
+
 export default function Home() {
   const [file,    setFile]    = useState<File | null>(null);
   const [localSrc,setLocalSrc]= useState<string>("");
@@ -33,6 +42,25 @@ export default function Home() {
   const [error,   setError]   = useState("");
   const [stage,   setStage]   = useState("");
   const [queue,   setQueue]   = useState<QueueItem[]>([]);
+  const [verifiedData, setVerifiedData] = useState<Record<string, string> | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("extraction_history");
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
+  }, []);
+
+  // Save history to localStorage when it changes
+  useEffect(() => {
+    if (history.length > 0) {
+      localStorage.setItem("extraction_history", JSON.stringify(history));
+    }
+  }, [history]);
 
   const handleFile = (f: File) => {
     const newItem: QueueItem = {
@@ -50,6 +78,8 @@ export default function Home() {
     setResult(null);
     setError("");
     setStage("");
+    setVerifiedData(null);
+    setIsSaved(false);
   };
 
   const processQueueItem = async (item: QueueItem): Promise<ExtractResult | null> => {
@@ -102,6 +132,42 @@ export default function Home() {
     }
   };
 
+  const handleVerify = (data: Record<string, string>) => {
+    setVerifiedData(data);
+  };
+
+  const handleSave = () => {
+    if (!result || !verifiedData) return;
+
+    const historyItem: HistoryItem = {
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: Date.now(),
+      doc_type: result.doc_type,
+      extracted: verifiedData,
+      preview: result.preview,
+    };
+
+    setHistory(prev => [historyItem, ...prev]);
+    setIsSaved(true);
+  };
+
+  const handleSelectHistoryItem = (item: HistoryItem) => {
+    // Create a mock result from history item
+    const mockResult: ExtractResult = {
+      doc_type: item.doc_type,
+      confidence: "High",
+      strategy: "History",
+      ocr_text: "",
+      extracted: item.extracted,
+      preview: item.preview,
+      cropped: item.preview,
+    };
+    setResult(mockResult);
+    setVerifiedData(item.extracted);
+    setIsSaved(true);
+    setShowHistory(false);
+  };
+
   const handleSubmit = async () => {
     const pendingItems = queue.filter(item => item.status === "pending");
     if (pendingItems.length === 0) return;
@@ -109,6 +175,8 @@ export default function Home() {
     setLoading(true);
     setError("");
     setResult(null);
+    setVerifiedData(null);
+    setIsSaved(false);
 
     for (const item of pendingItems) {
       // Update item status to processing
@@ -156,6 +224,24 @@ export default function Home() {
           }}>
             Universal ID Extractor
           </h1>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            style={{
+              marginLeft: "auto",
+              background: "transparent",
+              border: "1px solid var(--border)",
+              color: "var(--muted)",
+              fontSize: "0.85rem",
+              padding: "0.5rem 1rem",
+              borderRadius: 8,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            📜 History ({history.length})
+          </button>
         </div>
         <p style={{ color: "var(--muted)", fontSize: "0.85rem", margin: 0, fontFamily: "'IBM Plex Mono', monospace" }}>
           Smart crop&nbsp;→&nbsp;Chandra OCR 2&nbsp;→&nbsp;Ollama / Qwen2.5 extraction
@@ -190,11 +276,26 @@ export default function Home() {
         </div>
 
         {/* Right — result */}
-        <ResultPanel result={result} loading={loading} />
+        <ResultPanel 
+          result={result} 
+          loading={loading}
+          onVerify={handleVerify}
+          onSave={handleSave}
+          isVerified={isSaved}
+        />
       </div>
 
       {/* Status bar */}
       <StatusBar apiUrl={API_URL} />
+
+      {/* History Panel */}
+      {showHistory && (
+        <HistoryPanel
+          history={history}
+          onSelectItem={handleSelectHistoryItem}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       <style>{`
         @media (max-width: 720px) {
