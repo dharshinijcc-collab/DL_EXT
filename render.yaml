@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: id-extractor-frontend
+    env: node
+    buildCommand: npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://your-backend-url.onrender.com
+    region: oregon
+    plan: free
