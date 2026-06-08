@@ -6,6 +6,6 @@ services:
     startCommand: npm start
     envVars:
       - key: NEXT_PUBLIC_API_URL
-        value: https://your-backend-url.onrender.com
+        value: https://blurred-immorally-oaf.ngrok-free.dev
     region: oregon
     plan: free
